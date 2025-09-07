@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Xavier
+.DS_Store
+unmatched_in_csv.csv
+unmatched_in_geojson.csv

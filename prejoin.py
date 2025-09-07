@@ -36,6 +36,34 @@ def clean_numeric(x):
     except Exception:
         return pd.NA
 
+# ---- flexible, case/space/punct-insensitive column renamer ----
+def _norm(s: str) -> str:
+    """lowercase and strip all non-alphanumerics so 'Average Price' == 'average_price' == 'AveragePrice'"""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+RENAME_RULES = [
+    (["Sales"], "TRREB Sales"),
+    (["Average Price", "Avg Price", "AveragePrice"], "TRREB Average Price"),
+    (["Dollar Volume", "Total Dollar Volume", "$ Volume", "DollarVolume"], "TRREB Dollar Volume"),
+]
+
+def apply_fuzzy_renames(df: pd.DataFrame) -> dict:
+    """
+    Return the mapping applied and rename df columns in-place using RENAME_RULES.
+    Matches are case/space/punctuation-insensitive; first candidate that exists wins.
+    """
+    by_norm = {_norm(c): c for c in df.columns}
+    to_rename = {}
+    for candidates, new_name in RENAME_RULES:
+        for cand in candidates:
+            src = by_norm.get(_norm(cand))
+            if src:
+                to_rename[src] = new_name
+                break
+    if to_rename:
+        df.rename(columns=to_rename, inplace=True)
+    return to_rename
+
 # ----------------- main -----------------
 def main():
     p = argparse.ArgumentParser(description="Join CSV columns into a GeoJSON by district/area name.")
@@ -60,6 +88,11 @@ def main():
     first_col = df.columns[0]
     if not first_col.strip() or first_col.startswith("Unnamed"):
         df = df.rename(columns={first_col: "District"})
+
+    # Rename selected CSV columns to desired output names (before cleaning/merge)
+    applied = apply_fuzzy_renames(df)
+    if applied:
+        print("Renamed CSV columns ->", applied)
 
     # Auto-detect join keys if not provided
     candidates = ["District", "TRREB Area", "Name", "Region", "F1", "Area"]
