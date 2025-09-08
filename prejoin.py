@@ -43,22 +43,24 @@ def _norm(s: str) -> str:
 
 RENAME_RULES = [
     (["Sales"], "TRREB Sales"),
-    (["Average Price", "Avg Price", "AveragePrice"], " TRREB Average Price"),
-    (["Dollar Volume", "Total Dollar Volume", "$ Volume", "DollarVolume"], " TRREB Dollar Volume"),
-    (["Median Price"], " TRREB Median Price"),
-    (["New Listings"], " TRREB New Listings"),
-    (["SNLR Trend"], " TRREB SNLR Trend"),
-    (["Active Listings"], " TRREB Active Listings"),
-    (["Mos Inv (Trend)"], " TRREB Mos Inv"),
-    (["Avg. SP/LP"], " TRREB Avg. SP/LP"),
-    (["Avg. LDOM"], " TRREB Avg. LDOM"),
-    (["Avg. PDOM"], " TRREB Avg. PDOM"),
+    (["Average Price", "Avg Price", "AveragePrice"], "TRREB Average Price"),
+    (["Dollar Volume", "Total Dollar Volume", "$ Volume", "DollarVolume"], "TRREB Dollar Volume"),
+    (["Median Price"], "TRREB Median Price"),
+    (["New Listings"], "TRREB New Listings"),
+    (["SNLR Trend"], "TRREB SNLR Trend"),
+    (["Active Listings"], "TRREB Active Listings"),
+    (["Mos Inv (Trend)"], "TRREB Mos Inv"),
+    (["Avg. SP/LP"], "TRREB Avg. SP/LP"),
+    (["Avg. LDOM"], "TRREB Avg. LDOM"),
+    (["Avg. PDOM"], "TRREB Avg. PDOM"),
+
     (["Exposure"], "LENDSTRAIT Loan Amount"),
     (["First Mortgage"], "LENDSTRAIT First Mortgage"),
     (["Value"], "LENDSTRAIT Value"),
     (["LTV"], "LENDSTRAIT LTV"),
     (["Address"], "LENDSTRAIT Address"),
     (["TRREB Area (2)"], "LENDSTRAIT TRREB Area (2)"),
+
     (["Index (Composite)"], "HPI Index (Composite)"),
     (["Benchmark (Composite)"], "HPI Benchmark (Composite)"),
     (["YoY% (Composite)"], "HPI YoY% (Composite)"),
@@ -74,10 +76,6 @@ RENAME_RULES = [
     (["Index (Apartment)"], "HPI Index (Apartment)"),
     (["Benchmark (Apartment)"], "HPI Benchmark (Apartment)"),
     (["YoY% (Apartment)"], "HPI YoY% (Apartment)"),
-
-
-    # {"": "750700.0", "": "-1.21", "": "", "": "", "": "", "Index (Apartment)": "", "Benchmark (Apartment)": "", "YoY% (Apartment)": "" }
-
 ]
 
 def apply_fuzzy_renames(df: pd.DataFrame) -> dict:
@@ -156,6 +154,31 @@ def main():
     # Merge (left join: keep all polygons)
     merged = gdf.merge(df, on="_JOIN_KEY_", how="left", suffixes=("","_csv"))
 
+    # ---------- ensure the desired 5 fields are first ----------
+    # 1) strip accidental leading/trailing spaces in column names
+    merged.rename(columns=lambda c: c.strip() if isinstance(c, str) else c, inplace=True)
+
+    desired_first = [
+        "TRREB Area",
+        "TRREB SNLR Trend",
+        "LENDSTRAIT Loan Amount",
+        "LENDSTRAIT LTV",
+        "HPI YoY% (Composite)",
+    ]
+
+    geom_col = merged.geometry.name  # usually "geometry"
+    props = [c for c in merged.columns if c != geom_col]
+
+    # keep only existing desired columns (order preserved)
+    first = [c for c in desired_first if c in props]
+    missing = [c for c in desired_first if c not in props]
+    if missing:
+        print("⚠️  Missing expected columns (will be skipped):", missing)
+
+    rest = [c for c in props if c not in first]
+    merged = merged[first + rest + [geom_col]]
+    # -----------------------------------------------------------
+
     # Diagnostics: who didn't match?
     csv_only = df [~df["_JOIN_KEY_"].isin(gdf["_JOIN_KEY_"])]
     geo_only = gdf[~gdf["_JOIN_KEY_"].isin(df ["_JOIN_KEY_"])][[left_key]]
@@ -168,15 +191,12 @@ def main():
         geo_only.to_csv("unmatched_in_geojson.csv", index=False)
         print(f"⚠️  {len(geo_only)} polygons didn’t find CSV data. See unmatched_in_geojson.csv")
 
-    # Drop helper key
-    merged = merged.drop(columns=["_JOIN_KEY_"], errors="ignore")
-
     # Replace <NA> / NaN with empty string (Kepler-friendly)
     merged = merged.fillna("")
 
     # Save
     merged.to_file(out_path, driver="GeoJSON")
-    print(f"✅ Wrote {out_path.resolve()}")
+    print(f"✅ Wrote {out_path.resolve()} (first fields: {first})")
 
 if __name__ == "__main__":
     main()
