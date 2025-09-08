@@ -151,8 +151,19 @@ def main():
                 continue
             df[c] = df[c].apply(clean_numeric)
 
+    # ⬇️ Round LENDSTRAIT LTV to 2 decimals (if present)
+    if "LENDSTRAIT LTV" in df.columns:
+        df["LENDSTRAIT LTV"] = pd.to_numeric(df["LENDSTRAIT LTV"], errors="coerce").mul(100).round(1)
+    # ⬇️ RoundHPI YoY% (Composite) to 1 decimals (if present)
+    if "HPI YoY% (Composite)" in df.columns:
+        df["HPI YoY% (Composite)"] = pd.to_numeric(df["HPI YoY% (Composite)"], errors="coerce").round(1)
+
     # Merge (left join: keep all polygons)
     merged = gdf.merge(df, on="_JOIN_KEY_", how="left", suffixes=("","_csv"))
+
+    # Remove helper / unwanted properties
+    drop_cols = ["_JOIN_KEY_", "LENDSTRAIT TRREB Area (2)"]
+    merged = merged.drop(columns=[c for c in drop_cols if c in merged.columns], errors="ignore")
 
     # ---------- ensure the desired 5 fields are first ----------
     # 1) strip accidental leading/trailing spaces in column names
